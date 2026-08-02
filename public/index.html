@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>M-Pesa Checkout</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #0f172a; color: #f8fafc; margin: 0; padding: 16px; }
+    .card { background: #1e293b; padding: 32px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); width: 100%; max-width: 400px; box-sizing: border-box; }
+    h2 { margin-top: 0; color: #38bdf8; text-align: center; font-size: 24px; }
+    label { font-size: 14px; font-weight: 600; color: #94a3b8; display: block; margin-top: 16px; margin-bottom: 6px; }
+    input { width: 100%; padding: 12px; border: 1px solid #334155; background: #0f172a; color: #fff; border-radius: 8px; box-sizing: border-box; font-size: 16px; outline: none; }
+    input:focus { border-color: #38bdf8; }
+    button { width: 100%; background: #16a34a; color: white; border: none; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 8px; margin-top: 24px; cursor: pointer; transition: background 0.2s; }
+    button:hover { background: #15803d; }
+    button:disabled { background: #475569; cursor: not-allowed; }
+    #status { margin-top: 20px; font-size: 14px; text-align: center; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>M-Pesa Checkout</h2>
+    <form id="payForm">
+      <label for="phone">Phone Number</label>
+      <input type="tel" id="phone" placeholder="e.g. 0712345678 or 254712345678" required />
+
+      <label for="amount">Amount (KES)</label>
+      <input type="number" id="amount" placeholder="Enter amount" min="1" required />
+
+      <button type="submit" id="btnSubmit">Pay Now</button>
+    </form>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    document.getElementById('payForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btnSubmit');
+      const statusDiv = document.getElementById('status');
+
+      const phone = document.getElementById('phone').value;
+      const amount = document.getElementById('amount').value;
+
+      btn.disabled = true;
+      statusDiv.style.color = '#cbd5e1';
+      statusDiv.innerHTML = '🔄 Sending prompt... Please check your phone.';
+
+      try {
+        const response = await fetch('/api/stkpush', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, amount })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          statusDiv.style.color = '#4ade80';
+          statusDiv.innerHTML = '✅ Prompt sent! Enter your M-Pesa PIN on your phone.';
+        } else {
+          statusDiv.style.color = '#f87171';
+          statusDiv.innerHTML = '❌ Error: ' + (data.details ? JSON.stringify(data.details) : data.error);
+        }
+      } catch (err) {
+        statusDiv.style.color = '#f87171';
+        statusDiv.innerHTML = '❌ Connection Error: ' + err.message;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
