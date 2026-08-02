@@ -11,11 +11,11 @@ app.use(cors());
 // Serve static frontend files from 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- READ FROM ENVIRONMENT VARIABLES ---
-const CONSUMER_KEY = process.env.CONSUMER_KEY;
-const CONSUMER_SECRET = process.env.CONSUMER_SECRET;
-const SHORTCODE = process.env.SHORTCODE || '174379';
-const PASSKEY = process.env.PASSKEY || 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919';
+// --- READ FROM ENV OR USE DEFAULT SANDBOX KEYS ---
+const CONSUMER_KEY = (process.env.CONSUMER_KEY || 'XhDTkFome5qGLII2zgQAII3I6LGA2yC97K9XrFuessHRaxjI').trim();
+const CONSUMER_SECRET = (process.env.CONSUMER_SECRET || 'pUyle1cKxhniglbCYtxusfg92IPiALMw7xiGBinKHjkhyN5hc5sPoq4AyvjR1mAG').trim();
+const SHORTCODE = (process.env.SHORTCODE || '174379').trim();
+const PASSKEY = (process.env.PASSKEY || 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919').trim();
 
 // Helper: Format Timestamp (YYYYMMDDHHmmss)
 function getTimestamp() {
@@ -32,13 +32,13 @@ function getTimestamp() {
 // Middleware: OAuth Token Generation
 async function getAccessToken(req, res, next) {
   try {
-    const auth = Buffer.from(`${CONSUMER_KEY.trim()}:${CONSUMER_SECRET.trim()}`).toString('base64');
+    const auth = Buffer.from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`).toString('base64');
     const response = await axios.get(
       'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
       {
         headers: {
           Authorization: `Basic ${auth}`,
-          'User-Agent': 'Mozilla/5.0'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
         }
       }
     );
@@ -46,7 +46,7 @@ async function getAccessToken(req, res, next) {
     next();
   } catch (error) {
     console.error('OAuth Error:', error.response ? error.response.data : error.message);
-    res.status(500).json({ error: 'OAuth Handshake Failed', details: error.message });
+    res.status(500).json({ error: 'OAuth Handshake Failed', details: error.response ? error.response.data : error.message });
   }
 }
 
@@ -59,8 +59,8 @@ app.post('/api/stkpush', getAccessToken, async (req, res) => {
       return res.status(400).json({ error: 'Phone number and amount are required.' });
     }
 
-    // Clean up phone number format (e.g. 0712345678 -> 254712345678)
-    phone = phone.trim().replace(/\+/g, '');
+    // Format phone number to 254XXXXXXXXX
+    phone = String(phone).trim().replace(/\+/g, '');
     if (phone.startsWith('0')) {
       phone = '254' + phone.substring(1);
     }
