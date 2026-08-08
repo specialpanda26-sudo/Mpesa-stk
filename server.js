@@ -20,6 +20,24 @@ if (!PAYHERO_BASIC_AUTH || !PAYHERO_CHANNEL_ID) {
   console.warn('⚠️  PAYHERO_BASIC_AUTH / PAYHERO_CHANNEL_ID not set. Set them in your environment before going live.');
 }
 
+// TEMPORARY DEBUG ROUTE — remove after troubleshooting.
+// Shows only length + first/last few characters, never the full secret.
+app.get('/api/debug-env', (req, res) => {
+  const mask = (val) => {
+    if (!val) return null;
+    return {
+      length: val.length,
+      startsWithBasic: val.startsWith('Basic '),
+      first10: val.substring(0, 10),
+      last6: val.substring(val.length - 6)
+    };
+  };
+  res.json({
+    basicAuth: mask(PAYHERO_BASIC_AUTH),
+    channelId: PAYHERO_CHANNEL_ID
+  });
+});
+
 app.post('/api/stkpush', async (req, res) => {
   try {
     if (!PAYHERO_BASIC_AUTH || !PAYHERO_CHANNEL_ID) {
