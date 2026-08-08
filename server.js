@@ -9,51 +9,30 @@ app.use(express.json());
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Credentials
-const CONSUMER_KEY = (process.env.CONSUMER_KEY || 'XhDTkFome5qGLII2zgQAII3I6LGA2yC97K9XrFuessHRaxjI').trim();
-const CONSUMER_SECRET = (process.env.CONSUMER_SECRET || 'pUyle1cKxhniglbCYtxusfg92IPiALMw7xiGBinKHjkhyN5hc5sPoq4AyvjR1mAG').trim();
-const SHORTCODE = (process.env.SHORTCODE || '174379').trim();
-const PASSKEY = (process.env.PASSKEY || 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919').trim();
+// --- PayHero credentials: ALWAYS from environment variables, never hardcoded ---
+// Set these in Render > your service > Environment:
+//   PAYHERO_BASIC_AUTH   -> the full "Basic xxxxx..." token from PayHero API Keys page
+//   PAYHERO_CHANNEL_ID   -> your Till's channel_id (e.g. 11375)
+const PAYHERO_BASIC_AUTH = process.env.PAYHERO_BASIC_AUTH;
+const PAYHERO_CHANNEL_ID = process.env.PAYHERO_CHANNEL_ID;
 
-function getTimestamp() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-  return `${year}${month}${day}${hours}${minutes}${seconds}`;
+if (!PAYHERO_BASIC_AUTH || !PAYHERO_CHANNEL_ID) {
+  console.warn('⚠️  PAYHERO_BASIC_AUTH / PAYHERO_CHANNEL_ID not set. Set them in your environment before going live.');
 }
 
-async function getAccessToken(req, res, next) {
+app.post('/api/stkpush', async (req, res) => {
   try {
-    const auth = Buffer.from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`).toString('base64');
-    const response = await axios.get(
-      'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
-      {
-        headers: {
-          Authorization: `Basic ${auth}`
-        }
-      }
-    );
-    req.accessToken = response.data.access_token;
-    next();
-  } catch (error) {
-    console.error('OAuth Exception:', error.response ? error.response.data : error.message);
-    const details = error.response ? error.response.data : error.message;
-    res.status(500).json({ error: 'OAuth Handshake Failed', details });
-  }
-}
+    if (!PAYHERO_BASIC_AUTH || !PAYHERO_CHANNEL_ID) {
+      return res.status(500).json({ error: 'Server is missing PayHero credentials. Set PAYHERO_BASIC_AUTH and PAYHERO_CHANNEL_ID as environment variables.' });
+    }
 
-app.post('/api/stkpush', getAccessToken, async (req, res) => {
-  try {
     let { phone, amount } = req.body;
 
     if (!phone || !amount) {
       return res.status(400).json({ error: 'Phone number and amount are required.' });
     }
 
+    // Normalize phone to 2547XXXXXXXX format
     phone = String(phone).trim().replace(/\+/g, '');
     if (phone.startsWith('0')) {
       phone = '254' + phone.substring(1);
@@ -63,29 +42,21 @@ app.post('/api/stkpush', getAccessToken, async (req, res) => {
     const host = req.get('host');
     const callbackUrl = `${protocol}://${host}/api/callback`;
 
-    const timestamp = getTimestamp();
-    const password = Buffer.from(`${SHORTCODE}${PASSKEY}${timestamp}`).toString('base64');
-
     const stkPayload = {
-      BusinessShortCode: SHORTCODE,
-      Password: password,
-      Timestamp: timestamp,
-      TransactionType: 'CustomerPayBillOnline',
-      Amount: String(amount),
-      PartyA: phone,
-      PartyB: SHORTCODE,
-      PhoneNumber: phone,
-      CallBackURL: callbackUrl,
-      AccountReference: 'H-Custom Store',
-      TransactionDesc: 'M-Pesa Test'
+      amount: Number(amount),
+      phone_number: phone,
+      channel_id: Number(PAYHERO_CHANNEL_ID),
+      provider: 'm-pesa',
+      external_reference: `HCS-${Date.now()}`,
+      callback_url: callbackUrl
     };
 
     const stkResponse = await axios.post(
-      'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
+      'https://backend.payhero.co.ke/api/v2/payments',
       stkPayload,
       {
         headers: {
-          Authorization: `Bearer ${req.accessToken}`,
+          Authorization: PAYHERO_BASIC_AUTH, // already the full "Basic xxxx" string
           'Content-Type': 'application/json'
         }
       }
@@ -94,9 +65,9 @@ app.post('/api/stkpush', getAccessToken, async (req, res) => {
     res.status(200).json({ success: true, data: stkResponse.data });
   } catch (error) {
     console.error('STK Exception:', error.response ? error.response.data : error.message);
-    res.status(500).json({ 
-      error: 'STK Push Request Failed', 
-      details: error.response ? error.response.data : error.message 
+    res.status(500).json({
+      error: 'STK Push Request Failed',
+      details: error.response ? error.response.data : error.message
     });
   }
 });
